@@ -1,8 +1,9 @@
 ---
-- name: Автоматизация Docker и проверки скрипта
-  hosts: localhost
+- name: Автоматизация Docker и проверка скрипта
+  hosts: all
   become: yes
   vars:
+    ansible_user: "ekaterina"
     DOCKER_USER: "{{ ansible_user }}"
     IMAGE_NAME: "http-requests"
     CONTAINER_NAME: "http-requests-container"
@@ -18,16 +19,21 @@
         state: present
         update_cache: yes
 
-    - name: Добавить GPG-ключ docker
+    - name: Добавить GPG-ключ Docker
       ansible.builtin.get_url:
         url: https://download.docker.com/linux/ubuntu/gpg
         dest: /etc/apt/trusted.gpg.d/docker.asc
         mode: 0644
 
     - name: Добавить репозиторий Docker
-      apt_repository:
-        repo: "deb [arch={{ ansible_architecture }}] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu jammy stable"
         state: present
+
+    - name: Обновить кэш пакетов
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
 
     - name: Установить Docker
       apt:
@@ -35,16 +41,24 @@
           - docker-ce
           - docker-ce-cli
           - containerd.io
+          - docker-buildx-plugin
         state: latest
-        update_cache: yes
 
+    - name: Проверить версию Docker
+      command: docker --version
+      register: docker_version
+
+    - name: Вывести версию Docker
+      debug:
+        msg: "Установлен Docker версии: {{ docker_version.stdout }}"
+   
     - name: Добавить пользователя в группу docker
       user:
         name: "{{ DOCKER_USER }}"
         groups: docker
         append: yes
 
-    - name: Перезагрузка сервиса Docker
+    - name: Перезагрузить сервис Docker
       service:
         name: docker
         state: restarted
@@ -53,7 +67,7 @@
       community.docker.docker_image:
         name: "{{ IMAGE_NAME }}"
         build:
-          path: ../section2
+          path: ../section_2
           pull: yes
         source: build
         state: present
@@ -65,32 +79,20 @@
         state: started
         detach: yes
 
-    - name: Проверить статус контейнера
-      community.docker.docker_container_info:
-        name: "{{ CONTAINER_NAME }}"
-      register: container_info
-
-    - name: Убедиться, что контейнер работает
-      assert:
-        that: container_info.containers[0].State.Status == "running"
-        fail_msg: "Контейнер не запущен!"
-
-    - name: Получить логи контейнера
-      community.docker.docker_container_logs:
-        container: "{{ CONTAINER_NAME }}"
-      register: container_logs
+    - name: Получить логи
+      command: docker logs {{ CONTAINER_NAME }}
+      register: logs
 
     - name: Вывести логи
       debug:
-        var: container_logs.log
-        verbosity: 1
+        var: logs.stdout
 
-    - name: Проверить код завершения
-      command: docker inspect -f '{{ '{{' }}.State.ExitCode{{ '}}' }}' "{{ CONTAINER_NAME }}"
-      register: exit_code
-      changed_when: false
+    - name: Проверить код завершения через модуль
+      community.docker.docker_container_info:
+        name: "{{ CONTAINER_NAME }}"
+      register: container_exit_code
 
     - name: Убедиться, что код завершения 0
       assert:
-        that: exit_code.stdout == "0"
-        fail_msg: "Скрипт завершился с ошибкой!"
+        that: container_exit_code.container.State.ExitCode == 0
+        fail_msg: "Скрипт завершился с ошибкой (код {{ container_exit_code.container.State.ExitCode }})!"
