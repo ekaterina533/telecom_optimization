@@ -5,9 +5,9 @@ def check_url(url):
     try:
         response = requests.get(url, timeout=5)
         
-        if response.status_code < 400:  # 1xx, 2xx, 3xx
+        if response.status_code < 400: 
             print(f"Успех: {url}\nКод: {response.status_code}\nОтвет: {response.text}\n")
-        else:  # 4xx, 5xx
+        else: 
             raise Exception(f"Ошибка: {url}\nКод: {response.status_code}\nОтвет: {response.text}")
             
     except requests.exceptions.RequestException as e:
