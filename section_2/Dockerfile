@@ -11,5 +11,4 @@ COPY section_1/HTTP_requests.py .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Команда для запуска при старте контейнера
 CMD ["python3", "HTTP_requests.py"]
